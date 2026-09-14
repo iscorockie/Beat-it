@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COLLISION ENGINE — Beat Lab</title>
+<style>
+  :root{
+    --bg:#0b0c0e; --panel:#121417; --panel2:#171a1f; --line:#252a31;
+    --ink:#e8eaed; --dim:#8b939e; --dim2:#5c646f;
+    --hot:#ff5c37; --hot2:#ff8a5c; --cool:#5ce1e6; --gold:#e8c15c;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased; line-height:1.5;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+
+  header{border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:26px}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--hot);text-transform:uppercase}
+  h1{margin:6px 0 4px;font-size:30px;letter-spacing:-.02em;font-weight:700}
+  h1 em{font-style:normal;color:var(--hot)}
+  .sub{color:var(--dim);font-size:14px;max-width:680px}
+
+  .grid{display:grid;grid-template-columns:1fr 340px;gap:22px;align-items:start}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card + .card{margin-top:16px}
+  .card h2{margin:0 0 12px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-family:var(--mono);font-weight:600}
+
+  button{font-family:inherit;cursor:pointer}
+  .btn{
+    width:100%;padding:15px 18px;border-radius:10px;border:0;
+    background:linear-gradient(180deg,var(--hot),#e04420);color:#fff;
+    font-size:15px;font-weight:700;letter-spacing:.03em;
+    box-shadow:0 6px 20px -8px rgba(255,92,55,.7);
+  }
+  .btn:hover{filter:brightness(1.08)}
+  .btn:active{transform:translateY(1px)}
+  .btn.ghost{
+    background:transparent;border:1px solid var(--line);color:var(--dim);
+    font-size:12px;font-weight:600;padding:10px 14px;box-shadow:none;width:auto
+  }
+  .btn.ghost:hover{border-color:var(--hot);color:var(--hot)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{
+    border:1px solid var(--line);background:var(--panel2);color:var(--dim);
+    border-radius:999px;padding:6px 12px;font-size:12px;font-weight:500;
+    transition:.12s;
+  }
+  .chip:hover{border-color:#3a414b;color:var(--ink)}
+  .chip.on{background:rgba(255,92,55,.13);border-color:var(--hot);color:var(--hot2)}
+  .chip .n{font-family:var(--mono);font-size:10px;opacity:.6;margin-right:5px}
+
+  select{
+    width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:9px 10px;font-family:var(--mono);font-size:12px;margin-top:6px
+  }
+  label.fld{display:block;margin-bottom:12px}
+  label.fld span{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);font-family:var(--mono)}
+
+  /* result */
+  #result{display:none}
+  .beatname{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:0 0 2px}
+  .collision{color:var(--dim);font-size:13px;margin-bottom:16px}
+  .metrics{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  .metric{font-family:var(--mono);font-size:11px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 9px;color:var(--cool)}
+  .metric.k{color:var(--gold)}
+
+  .field{margin-bottom:14px}
+  .field .lbl{
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--dim2);margin-bottom:5px
+  }
+  .field .lbl .copy{
+    background:none;border:0;color:var(--dim2);font-family:var(--mono);font-size:10px;
+    letter-spacing:.1em;padding:0
+  }
+  .field .lbl .copy:hover{color:var(--hot)}
+  .out{
+    background:#0a0b0d;border:1px solid var(--line);border-radius:8px;padding:12px 13px;
+    font-family:var(--mono);font-size:12.5px;line-height:1.65;color:#d6dae0;
+    white-space:pre-wrap;word-break:break-word
+  }
+  .out.big{font-size:13.5px;color:#fff;border-color:#333a44}
+  .count{font-family:var(--mono);font-size:10px;color:var(--dim2)}
+  .count.warn{color:var(--gold)}
+  .count.bad{color:var(--hot)}
+
+  .why{margin-top:4px;padding:12px 13px;background:rgba(92,225,230,.05);border-left:2px solid var(--cool);border-radius:0 6px 6px 0;font-size:13px;color:#b9c6cc}
+
+  /* history */
+  .hist{max-height:420px;overflow-y:auto;margin:-4px -4px 0}
+  .histrow{
+    display:flex;justify-content:space-between;gap:8px;padding:8px 4px;
+    border-bottom:1px solid #1c2027;font-size:12px
+  }
+  .histrow:last-child{border-bottom:0}
+  .histrow b{font-weight:600;color:var(--ink);font-size:12px}
+  .histrow i{font-style:normal;color:var(--dim2);font-size:10.5px;display:block;font-family:var(--mono)}
+  .empty{color:var(--dim2);font-size:12px;padding:10px 4px}
+
+  footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);color:var(--dim2);font-size:11.5px;font-family:var(--mono);letter-spacing:.04em}
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:var(--hot);color:#fff;padding:9px 18px;border-radius:999px;font-size:12.5px;font-weight:600;
+    opacity:0;pointer-events:none;transition:.22s
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Beat Lab · Novelty Engine v1.0</div>
+  <h1>COLLISION <em>ENGINE</em></h1>
+  <p class="sub">Five levers. Two things that have no business meeting. Hit generate, paste into Suno, log it — and never make the same beat twice.</p>
+</header>
+
+<div class="grid">
+
+  <!-- LEFT -->
+  <div>
+    <div class="card">
+      <h2>The Five Levers</h2>
+      <div class="chips" id="levers"></div>
+    </div>
+
+    <div class="card">
+      <h2>Force the Inputs (optional)</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px">
+        <label class="fld"><span>Hero instrument</span>
+          <select id="selInst"></select></label>
+        <label class="fld"><span>Collision genre</span>
+          <select id="selGenre"></select></label>
+        <label class="fld"><span>Mode / scale</span>
+          <select id="selMode"></select></label>
+        <label class="fld"><span>Mood</span>
+          <select id="selMood"></select></label>
+      </div>
+      <div style="margin-top:6px">
+        <button class="btn" id="go">GENERATE COLLISION</button>
+      </div>
+    </div>
+
+    <div class="card" id="result">
+      <h2>Your Beat</h2>
+      <p class="beatname" id="rName">—</p>
+      <p class="collision" id="rColl">—</p>
+      <div class="metrics" id="rMetrics"></div>
+
+      <div class="field">
+        <div class="lbl"><span>Suno → Style of Music</span><button class="copy" data-t="style">COPY</button></div>
+        <div class="out big" id="rStyle"></div>
+        <div class="count" id="cStyle" style="margin-top:5px"></div>
+      </div>
+
+      <div class="field">
+        <div class="lbl"><span>Advanced → Exclude Styles</span><button class="copy" data-t="excl">COPY</button></div>
+        <div class="out" id="rExcl"></div>
+      </div>
+
+      <div class="field">
+        <div class="lbl"><span>Video title</span><button class="copy" data-t="title">COPY</button></div>
+        <div class="out" id="rTitle"></div>
+      </div>
+
+      <div class="field">
+        <div class="lbl"><span>The thesis (write this in your description)</span></div>
+        <div class="why" id="rWhy"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn ghost" id="reroll">↻ Reroll prompt</button>
+        <button class="btn ghost" id="logit">＋ Log this beat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div>
+    <div class="card">
+      <h2>The Lever Cheat Sheet</h2>
+      <div style="font-size:12.5px;color:var(--dim);line-height:1.75" id="cheat"></div>
+    </div>
+
+    <div class="card">
+      <h2>Logged Beats <span id="hcount" style="float:right;color:var(--hot)"></span></h2>
+      <div class="hist" id="hist"><div class="empty">Nothing logged yet. Generate one.</div></div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn ghost" id="export">Export CSV</button>
+        <button class="btn ghost" id="clear">Clear</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  1. Custom Mode → Instrumental ON &nbsp;·&nbsp; 2. Paste Style + Exclude &nbsp;·&nbsp; 3. Generate 4 versions, keep the weirdest that still grooves &nbsp;·&nbsp; 4. Disclose AI · never name a real artist
+</footer>
+</div>
+
+<div class="toast" id="toast">Copied</div>
+
+<script>
+/* ============================ DATA ============================ */
+const INSTRUMENTS = [
+ {n:"mbira dzavadzimu",c:"Zimbabwe, Shona",e:"1000+ yrs",d:"interlocking kushaura and kutsinhira patterns",p:"hosho shakers",m:["minor pentatonic","hexatonic"]},
+ {n:"Javanese gamelan",c:"Java, Indonesia",e:"900+ yrs",d:"detuned paired bronze metallophones with shimmering ombak beating",p:"kendang drum and gong ageng",m:["pelog","slendro"]},
+ {n:"guembri sintir",c:"Morocco, Gnawa",e:"400+ yrs",d:"three-string bass lute, percussive plucked thumb",p:"qraqeb metal castanets and handclaps",m:["maqam hijaz","phrygian dominant"]},
+ {n:"Cristal Baschet",c:"France",e:"1952",d:"vibrating glass rods, glass crystal clarion",p:"",m:["aeolian","lydian"]},
+ {n:"tenor steel pan",c:"Trinidad",e:"1930s",d:"bright metallic melodic pan riffing",p:"",m:["minor pentatonic","dorian"]},
+ {n:"qanun",c:"Egypt / Levant",e:"900+ yrs",d:"plucked zither with microtonal lever bends",p:"darbuka and riq",m:["maqam hijaz","maqam rast","maqam nahawand"]},
+ {n:"nyckelharpa",c:"Sweden",e:"600+ yrs",d:"keyed fiddle with buzzing sympathetic resonance strings",p:"",m:["dorian","aeolian","harmonic minor"]},
+ {n:"Hardanger fiddle",c:"Norway",e:"300+ yrs",d:"bowed fiddle ringing with sympathetic understrings",p:"",m:["dorian","aeolian","lydian"]},
+ {n:"kora",c:"Gambia / Mali",e:"300+ yrs",d:"21-string harp-lute, thumb-lead and finger-bass",p:"",m:["major pentatonic","lydian"]},
+ {n:"santur",c:"Iran",e:"600+ yrs",d:"hammered dulcimer, cascading tremolo strikes",p:"",m:["maqam rast","phrygian dominant","harmonic minor"]},
+ {n:"hurdy-gurdy",c:"Europe",e:"1000+ yrs",d:"wheel fiddle with buzzing rhythmic coups and droning trompette",p:"",m:["dorian","mixolydian"]},
+ {n:"erhu",c:"China",e:"1000+ yrs",d:"two-string bowed spike fiddle, vocal slides",p:"",m:["minor pentatonic","hexatonic"]},
+ {n:"guzheng",c:"China",e:"2500+ yrs",d:"plucked zither with bent-note slides and rippling arpeggios",p:"",m:["minor pentatonic","major pentatonic"]},
+ {n:"khomus jaw harp",c:"Tuva / Yakutia",e:"ancient",d:"mouth-resonated jaw harp overtones",p:"",m:["minor pentatonic","drone"]},
+ {n:"igil",c:"Tuva",e:"300+ yrs",d:"horsehead bowed fiddle, raw and nasal",p:"",m:["minor pentatonic","drone"]},
+ {n:"morin khuur",c:"Mongolia",e:"800+ yrs",d:"horsehead fiddle with wolf-head scroll",p:"",m:["minor pentatonic","drone"]},
+ {n:"berimbau",c:"Brazil, Bahia",e:"Afro-Brazilian",d:"single-string musical bow with caxixi shaker",p:"",m:["minor pentatonic","dorian"]},
+ {n:"saz baglama",c:"Turkey / Anatolia",e:"500+ yrs",d:"long-necked lute with rapid plectrum tremolo",p:"",m:["makam hicaz","phrygian dominant","harmonic minor"]},
+ {n:"clawhammer banjo",c:"Appalachia, USA",e:"1800s",d:"frailing banjo, thumb on the drone string",p:"",m:["dorian","mixolydian","minor pentatonic"]},
+ {n:"pedal steel",c:"USA",e:"1950s",d:"pedal steel swells bending under the bar",p:"",m:["major pentatonic","lydian"]},
+ {n:"tres",c:"Cuba",e:"1800s",d:"triple-coursed guitar, bright ostinato arpeggios",p:"",m:["major pentatonic","mixolydian"]},
+ {n:"charango",c:"Andes, Bolivia/Peru",e:"1700s",d:"small lute with shimmering strummed tremolo",p:"",m:["minor pentatonic","aeolian"]},
+ {n:"waterphone",c:"USA",e:"1960s",d:"water-tuned bronze rods, eerie gliding overtones",p:"",m:["whole tone","aeolian"]},
+ {n:"Ondes Martenot",c:"France",e:"1928",d:"ribbon-controlled early electronic oscillator",p:"",m:["aeolian","whole tone","lydian"]},
+ {n:"theremin",c:"Russia",e:"1920s",d:"theremin, continuous glissando with no attack",p:"",m:["aeolian","harmonic minor"]},
+ {n:"mridangam",c:"South India",e:"2000+ yrs",d:"double-headed barrel drum with konnakol-style phrasing",p:"ghatam and kanjira",m:["carnatic raga bhairavi","minor pentatonic"]},
+ {n:"tinde",c:"Sahara, Tuareg",e:"ancient",d:"mortar hand drum",p:"dense handclaps",m:["minor pentatonic"]},
+ {n:"taiko",c:"Japan",e:"ancient",d:"large ensemble drums struck with thunderous unison",p:"",m:["drone","phrygian"]},
+ {n:"bodhran",c:"Ireland",e:"ancient",d:"frame drum played with a double-ended stick",p:"",m:["dorian","mixolydian","minor pentatonic"]},
+ {n:"talking drum",c:"West Africa",e:"ancient",d:"hourglass tension drum that bends pitch like speech",p:"",m:["minor pentatonic","dorian"]},
+ {n:"prepared piano",c:"20th century",e:"1940s",d:"prepared piano, muted and rattling strings",p:"",m:["whole tone","aeolian","lydian"]},
+ {n:"glass armonica",c:"Europe",e:"1761",d:"spinning glass bowls touched with wet fingers",p:"",m:["aeolian","lydian","harmonic minor"]},
+ {n:"balafon",c:"Mali / Guinea",e:"800+ yrs",d:"gourd-resonated wooden marimba with buzzing bridges",p:"",m:["minor pentatonic","hexatonic"]},
+ {n:"duduk",c:"Armenia",e:"1500+ yrs",d:"double-reed woodwind, mournful and breathy",p:"",m:["phrygian dominant","harmonic minor","aeolian"]},
+ {n:"shakuhachi",c:"Japan",e:"700+ yrs",d:"bamboo end-blown flute with breathy meri-kari bends",p:"",m:["minor pentatonic","phrygian"]},
+ {n:"gaita bagpipe",c:"Galicia / Asturias",e:"ancient",d:"drone bagpipe with reedy overblown tone",p:"",m:["dorian","mixolydian"]},
+];
+
+const GENRES = [
+ {n:"Memphis phonk",e:"2010s",o:"Memphis",per:"distorted cowbell and sliding 808 sub bass",pro:"tape-saturated dusty drums",bpm:[124,132],x:["trap hi-hat rolls","EDM drop","modern pop"]},
+ {n:"half-time Atlanta trap",e:"2010s",o:"Atlanta",per:"heavy 808 sub and sparse ticking hats",pro:"wide clean mix with huge low end",bpm:[130,150],x:["four-on-the-floor","EDM build"]},
+ {n:"90s New York boom bap",e:"1990s",o:"New York",per:"dusty sampled drums and upright bass",pro:"crunchy 12-bit sampler grit",bpm:[85,95],x:["trap","808 slides","autotune"]},
+ {n:"Jersey club",e:"2000s",o:"Newark",per:"triplet-swing claps and sharp sub kicks",pro:"bright and clipped",bpm:[130,145],x:["four-on-the-floor","EDM drop","trap hi-hat"]},
+ {n:"Chicago footwork",e:"2000s",o:"Chicago",per:"frenetic triplet percussion and rapid toms",pro:"raw and fast, 808 underneath",bpm:[155,165],x:["four-on-the-floor","EDM drop","trap hi-hat"]},
+ {n:"Baltimore club",e:"1990s",o:"Baltimore",per:"chopped breakbeats and whistles",pro:"raw sample-based bounce",bpm:[128,134],x:["EDM drop","trap","four-on-the-floor"]},
+ {n:"Detroit techno",e:"1980s",o:"Detroit",per:"shuffling drum machine",pro:"modular synth bleeps and warm analog chord stabs",bpm:[124,132],x:["orchestral swell","vocals","EDM drop"]},
+ {n:"melodic deep house",e:"2010s",o:"global",per:"four-on-the-floor",pro:"warm sub bass and dub chords",bpm:[118,124],x:["drop","sidechain pumping","trap","vocals"]},
+ {n:"UK dub",e:"1970s",o:"Kingston / London",per:"one-drop drum",pro:"tape delay echoes and spring reverb",bpm:[68,80],x:["distortion","trap","EDM","vocals"]},
+ {n:"1984 synthwave",e:"1980s",o:"global",per:"gated reverb snare and arpeggiated analog bass",pro:"neon-wide pads and cinematic sheen",bpm:[100,118],x:["dubstep","trap","modern EDM","vocals"]},
+ {n:"UK drill",e:"2010s",o:"London",per:"skittering hats and sliding 808",pro:"dark piano and cold minimal mix",bpm:[138,146],x:["EDM drop","four-on-the-floor","vocals"]},
+ {n:"drill and bass",e:"1990s",o:"UK",per:"chopped and stuttering breakbeat edits",pro:"frantic digital editing",bpm:[150,175],x:["vocals","EDM","four-on-the-floor"]},
+ {n:"industrial techno",e:"2010s",o:"Berlin",per:"distorted kick and metallic percussion",pro:"relentless and corroded",bpm:[128,140],x:["vocals","orchestral","EDM drop"]},
+ {n:"amapiano",e:"2010s",o:"South Africa",per:"log drum bass and shuffling shakers",pro:"smooth and humid",bpm:[110,116],x:["vocals","EDM drop","trap"]},
+ {n:"gqom",e:"2010s",o:"Durban",per:"minimal broken kick patterns",pro:"dark, hollow and enormous",bpm:[124,132],x:["vocals","EDM","four-on-the-floor"]},
+ {n:"New Orleans bounce",e:"1990s",o:"New Orleans",per:"fast claps on the Triggerman rhythm",pro:"raw and chant-like",bpm:[95,105],x:["vocals","EDM","four-on-the-floor"]},
+ {n:"baile funk",e:"2000s",o:"Rio de Janeiro",per:"tamborzao bass pattern",pro:"raw drums and loud mids",bpm:[128,136],x:["vocals","EDM drop","trap"]},
+ {n:"afrobeat",e:"1970s",o:"Lagos",per:"interlocking polyrhythm and horn section",pro:"warm live-room recording",bpm:[100,115],x:["EDM","trap","vocals"]},
+ {n:"bossa nova",e:"1960s",o:"Rio de Janeiro",per:"brushed jazz drums",pro:"nylon-string guitar and close intimate mics",bpm:[70,95],x:["vocals","synth","EDM"]},
+ {n:"shoegaze",e:"1990s",o:"UK",per:"drums buried under the mix",pro:"walls of distorted guitar and smeared reverb",bpm:[90,120],x:["EDM","trap","vocals"]},
+ {n:"post-rock",e:"2000s",o:"global",per:"slow crescendos",pro:"long builds and wide dynamic range",bpm:[70,100],x:["vocals","EDM","drop","trap"]},
+ {n:"2-step garage",e:"1990s",o:"London",per:"skippy hats and shuffling 2-step",pro:"warm sub and vocal-sample-free swing",bpm:[128,136],x:["four-on-the-floor","EDM drop","trap"]},
+ {n:"halftime drum and bass",e:"2010s",o:"UK",per:"heavy halftime kick with deep sub",pro:"sparse, cold and spacious",bpm:[85,90],x:["vocals","EDM","four-on-the-floor"]},
+ {n:"trip-hop",e:"1990s",o:"Bristol",per:"slow dusty breaks",pro:"cinematic and smoky",bpm:[80,95],x:["vocals","EDM","drop","trap"]},
+ {n:"ambient dub techno",e:"1990s",o:"Berlin",per:"soft four-on-the-floor pulse",pro:"dub chords and tape hiss",bpm:[115,124],x:["vocals","drop","trap"]},
+ {n:"jazz-hop",e:"2010s",o:"global",per:"brushed drums and walking upright bass",pro:"Rhodes chords on a mono tape mix",bpm:[78,92],x:["vocals","EDM","trap","808"]},
+ {n:"breakcore",e:"2000s",o:"global",per:"shredded Amen breaks",pro:"extreme tempo and maximalist edits",bpm:[160,190],x:["vocals","four-on-the-floor","EDM"]},
+ {n:"neo-soul",e:"1990s",o:"USA",per:"laid-back pocket drums",pro:"warm Rhodes and analog tape saturation",bpm:[72,92],x:["vocals","EDM","trap","808"]},
+];
+
+const MODES = ["maqam hijaz","maqam rast","pelog","slendro","phrygian dominant","harmonic minor","double harmonic","minor pentatonic","major pentatonic","whole tone","dorian","lydian","aeolian","mixolydian","phrygian","carnatic raga bhairavi","makam hicaz","blues scale","hexatonic","open drone"];
+const EXOTIC = ["maqam hijaz","maqam rast","pelog","slendro","phrygian dominant","double harmonic","whole tone","carnatic raga bhairavi","makam hicaz","hexatonic"];
+
+const METERS = ["asymmetric 11/16 kopanitsa","7/8 aksak","5/4","9/8","6/8 trance","3-against-4 polyrhythm","5-against-4 polyrhythm","12/8 Ewe bell pattern","7/16 rachenitsa"];
+const ODD_KITS = ["breath, tongue clicks and chest thumps","qraqeb metal castanets","struck matchboxes and knuckle cracks","handclaps and stomps only","bones and struck wood","metal filing cabinets and scrap","typewriter keys and stapler clicks","shuffling cards and tapped glass","bicycle spokes and thumb piano"];
+const SUBTRACTIONS = [
+ {t:"kick drum",x:"kick drum"},
+ {t:"snare",x:"snare drum, backbeat"},
+ {t:"bass entirely",x:"bass, sub bass, low end"},
+ {t:"reverb",x:"reverb, ambient pads, wide stereo"},
+ {t:"percussion entirely",x:"drum kit, percussion, drums"},
+ {t:"melody",x:"melody, lead instrument, hooks"},
+ {t:"any electronic element",x:"synthesizer, electronic drums"},
+ {t:"chords",x:"chords, harmony, pads"}
+];
+const MOODS = ["dark and devotional","meditative and ominous","frenetic and festive","longing and expansive","primal and intimate","cavernous and shimmering","ecstatic and bright","cinematic and neon","driving and hypnotic","smoky and hypnotic","rustic and futurist","cold and sculptural","tender and weathered","triumphant and processional","unsettling and patient"];
+
+const LEVERS = [
+ {id:"century",k:"01",n:"Swap the century",d:"Pair an instrument older than nations with a genre younger than smartphones. <b>Always on by default.</b>"},
+ {id:"scale",k:"02",n:"Swap the scale",d:"Leave 12-tone equal temperament. Force a maqam, pelog, raga or pentatonic onto the track."},
+ {id:"grid",k:"03",n:"Swap the grid",d:"Leave 4/4. Run the beat in 11/16, 7/8, 5/4 or an interlocking polyrhythm."},
+ {id:"kit",k:"04",n:"Swap the kit",d:"Delete the drum machine. Percuss it with breath, metal, bone, or struck objects."},
+ {id:"subtract",k:"05",n:"Subtract",d:"Remove one thing every producer treats as mandatory — the kick, the snare, the bass, the reverb."},
+];
+
+const NAME_A = ["OBSIDIAN","SALT","BONE","TIDE","EMBER","GHOST","HIVE","KILN","PARCHMENT","RAWHIDE","SILT","TALLOW","VERDIGRIS","WICK","YARROW","ZINC","ANTLER","BASALT","CINDER","DRIFT","FLINT","HOLLOW","LICHEN","MARROW","NOMAD","QUARTZ","RESIN","SABLE","THORN","UMBER","VESSEL","WARP","IRON","GRAIN","MOSS","SLATE","TALLOW","HUSK","LOOM","RUIN"];
+const NAME_B = ["PHONK","DRIFT","BAP","CLUB","DUB","FOOTWORK","DRIVE","MACHINE","ENGINE","RITE","SIGNAL","PULSE","SYSTEM","INDEX","LOCK","GROOVE","WEIGHT","HYMN","CIRCUIT","STATIC","VESSEL","FRACTURE","LATTICE","MIGRATION","TIDE","WELL","GRID","SEAM","HARVEST","RELAY"];
+
+/* ============================ STATE ============================ */
+let on = {century:true, scale:false, grid:false, kit:false, subtract:false};
+let current = null;
+let log = [];
+
+const $ = id => document.getElementById(id);
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const ri = (lo,hi) => Math.floor(Math.random()*(hi-lo+1))+lo;
+
+/* ============================ LAYOUT ============================ */
+$("levers").innerHTML = LEVERS.map(l=>
+  `<button class="chip${on[l.id]?' on':''}" data-lever="${l.id}"><span class="n">${l.k}</span>${l.n}</button>`
+).join("");
+$("cheat").innerHTML = LEVERS.map(l=>`<div style="margin-bottom:9px"><b style="color:var(--ink)">${l.k} · ${l.n}</b><br>${l.d}</div>`).join("");
+
+function fill(sel, arr, label, getVal){
+  let h = `<option value="">— random —</option>`;
+  arr.forEach((o,i)=>{ h += `<option value="${i}">${getVal(o)}</option>`; });
+  $(sel).innerHTML = h;
+}
+fill("selInst", INSTRUMENTS, "inst", o=>`${o.n} · ${o.c}`);
+fill("selGenre", GENRES, "gen", o=>`${o.n} · ${o.o} ${o.e}`);
+fill("selMode", MODES, "mode", o=>o);
+fill("selMood", MOODS, "mood", o=>o);
+
+/* ============================ GENERATE ============================ */
+function build(){
+  const inst  = $("selInst").value  !== "" ? INSTRUMENTS[+$("selInst").value]  : pick(INSTRUMENTS);
+  const gen   = $("selGenre").value !== "" ? GENRES[+$("selGenre").value]      : pick(GENRES);
+
+  let mode, meter = null, kit = null, sub = null;
+
+  if(on.scale){
+    const compat = inst.m.filter(m=>EXOTIC.includes(m));
+    mode = compat.length ? pick(compat) : pick(EXOTIC);
+  } else {
+    mode = $("selMode").value !== "" ? MODES[+$("selMode").value] : (Math.random()<0.6 ? pick(inst.m) : pick(MODES));
+  }
+
+  if(on.grid)  meter = pick(METERS);
+  if(on.kit)   kit   = pick(ODD_KITS);
+  if(on.subtract) sub = pick(SUBTRACTIONS);
+
+  const mood = $("selMood").value !== "" ? MOODS[+$("selMood").value] : pick(MOODS);
+  let bpm = ri(gen.bpm[0], gen.bpm[1]);
+  if(on.grid) bpm = Math.round(bpm/5)*5;
+
+  /* ---- style prompt ---- */
+  const s = [];
+  s.push("instrumental");
+  s.push(`${inst.n}, ${inst.d}`);
+  if(inst.p && !on.kit) s.push(inst.p);
+  s.push(gen.n);
+  if(on.kit) s.push(`percussion performed entirely with ${kit}`);
+  else s.push(gen.per);
+  s.push(gen.pro);
+  s.push(`${mode} mode`);
+  if(meter) s.push(`in ${meter}`);
+  if(sub) s.push(`no ${sub.t}`);
+  s.push(mood);
+  s.push(`${bpm} BPM`);
+  const style = s.join(", ");
+
+  /* ---- exclude ---- */
+  const ex = ["vocals","singing","choir","vocal chops"];
+  gen.x.forEach(t=>{ if(!ex.includes(t)) ex.push(t); });
+  if(sub) ex.unshift(sub.x);
+  if(on.kit) ex.push("drum kit","snare drum","synthesizer");
+  const exclude = [...new Set(ex)].slice(0,6).join(", ");
+
+  /* ---- name + title ---- */
+  const name = `${pick(NAME_A)} ${pick(NAME_B)}`;
+  const title = `${name} — ${cap(inst.n)} × ${cap(gen.n)} | ${bpm} BPM`;
+
+  /* ---- thesis ---- */
+  const leverNames = [];
+  if(on.century) leverNames.push(`an instrument from ${inst.e}`);
+  if(on.scale)   leverNames.push(`${mode} instead of equal temperament`);
+  if(on.grid)    leverNames.push(meter.split(" ").slice(-1)[0].replace("/","-over-")+" meter");
+  if(on.kit)     leverNames.push("a drum kit made of things that aren't drums");
+  if(on.subtract)leverNames.push(`no ${sub.t} at all`);
+  const why = `The ${inst.n} comes from ${inst.c} and has been played for ${inst.e}. ${cap(gen.n)} comes from ${gen.o} and is ${gen.e}. `+
+    `This track makes them share one ${bpm}-BPM room`+
+    (leverNames.length ? `, and forces ${leverNames.join(", ")}.` : `.`);
+
+  current = {name, inst, gen, mode, bpm, mood, meter, kit, sub, style, exclude, title, why};
+  render();
+}
+
+function render(){
+  const c = current;
+  $("rName").textContent = c.name;
+  $("rColl").textContent = `${c.inst.n} (${c.inst.c}, ${c.inst.e})  ×  ${c.gen.n} (${c.gen.o}, ${c.gen.e})`;
+  $("rMetrics").innerHTML =
+    `<span class="metric">${c.bpm} BPM</span>`+
+    `<span class="metric k">${c.mode}</span>`+
+    (c.meter?`<span class="metric">${c.meter}</span>`:"")+
+    (c.kit?`<span class="metric">odd kit</span>`:"")+
+    (c.sub?`<span class="metric">no ${c.sub.t}</span>`:"")+
+    `<span class="metric">${c.mood}</span>`;
+  $("rStyle").textContent = c.style;
+  $("rExcl").textContent  = c.exclude;
+  $("rTitle").textContent = c.title;
+  $("rWhy").textContent   = c.why;
+
+  const n = c.style.length;
+  const el = $("cStyle");
+  el.className = "count" + (n>320?" bad":n>270?" warn":"");
+  el.textContent = `${n} characters` + (n>320 ? " — trim a descriptor or two, Suno's Style field is short" : n>270 ? " — getting long, watch it" : " — good length");
+
+  $("result").style.display = "block";
+}
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+/* ============================ COPY ============================ */
+function copyText(t){
+  let ok = false;
+  try{
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.select();
+    ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+  }catch(e){}
+  if(!ok && navigator.clipboard){ navigator.clipboard.writeText(t).catch(()=>{}); }
+  const tst = $("toast"); tst.classList.add("show");
+  clearTimeout(window._tt); window._tt = setTimeout(()=>tst.classList.remove("show"),1200);
+}
+document.querySelectorAll(".copy").forEach(b=>{
+  b.onclick = ()=>{
+    const k = b.dataset.t;
+    copyText(k==="style"?current.style : k==="excl"?current.exclude : current.title);
+  };
+});
+
+/* ============================ EVENTS ============================ */
+$("levers").onclick = e=>{
+  const b = e.target.closest("[data-lever]"); if(!b) return;
+  const id = b.dataset.lever;
+  on[id] = !on[id];
+  b.classList.toggle("on", on[id]);
+  if(current) build();
+};
+$("go").onclick     = build;
+$("reroll").onclick = build;
+
+$("logit").onclick = ()=>{
+  if(!current) return;
+  log.unshift(current);
+  drawLog();
+  copyText(current.style);
+};
+
+function drawLog(){
+  const h = $("hist");
+  $("hcount").textContent = log.length ? log.length : "";
+  if(!log.length){ h.innerHTML = `<div class="empty">Nothing logged yet. Generate one.</div>`; return; }
+  h.innerHTML = log.map((c,i)=>
+    `<div class="histrow"><div><b>${c.name}</b><i>${cap(c.inst.n)} × ${cap(c.gen.n)}</i></div>
+     <div style="text-align:right;white-space:nowrap"><span class="metric">${c.bpm}</span></div></div>`
+  ).join("");
+}
+$("clear").onclick = ()=>{ if(confirm("Clear the whole log?")){ log=[]; drawLog(); } };
+
+$("export").onclick = ()=>{
+  if(!log.length){ alert("Log is empty."); return; }
+  const q = v => `"${String(v).replace(/"/g,'""')}"`;
+  const head = ["Name","Instrument","Culture","Era","Genre","BPM","Mode","Meter","Odd kit","Subtraction","Mood","Style prompt","Exclude","Title"];
+  let csv = head.map(q).join(",")+"\n";
+  log.forEach(c=>{
+    csv += [c.name,c.inst.n,c.inst.c,c.inst.e,c.gen.n,c.bpm,c.mode,c.meter||"",c.kit||"",c.sub?c.sub.t:"",c.mood,c.style,c.exclude,c.title].map(q).join(",")+"\n";
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download = "collision-log.csv";
+  a.click();
+};
+
+build();
+</script>
+</body>
+</html>
