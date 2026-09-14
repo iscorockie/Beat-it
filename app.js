@@ -33,6 +33,10 @@ $$(".modetab").forEach(b=>b.addEventListener("click",()=>{
   const m=b.dataset.mode;
   $$(".view").forEach(v=>v.classList.remove("active"));
   $("#view-"+m).classList.add("active");
+  // Tear down cross-view listeners / state
+  if(rKeyHandler){document.removeEventListener("keydown",rKeyHandler);rKeyHandler=null}
+  if(rTapHandler){const pad=$("#rpad");if(pad)pad.removeEventListener("pointerdown",rTapHandler);rTapHandler=null}
+  rListen=false;
   if(m==="sound") setTimeout(initSound,80);
   if(m==="rec") setTimeout(initRec,80);
   if(m==="beat"){ if(typeof stopRec==="function") stopRec(); }
@@ -288,11 +292,11 @@ function tone(t0,{f=100,f2=null,d=0.3,a=0.001,decay=0.2,v=0.8,w="sine",lp=0}){
 }
 function noise(t0,{d=0.2,a=0.001,dec=0.15,hp=200,lp=8000,v=0.6,q=0.6}){
   const s=ctx.createBufferSource();s.buffer=noiseBuf();
-  const hp2=ctx.createBiquadFilter();hp2.type="highpass";hp2.frequency.value=hp;
-  const bp=ctx.createBiquadFilter();bp.type="bandpass";bp.frequency.value=(hp+lp)/2;bp.Q.value=q;
-  const lp2=ctx.createBiquadFilter();lp2.type="lowpass";lp2.frequency.value=lp;
+  // highpass to cut sub rumble, then a gentle lowpass at `lp`, then a peak at `lp/2.5` for body
+  const hpf=ctx.createBiquadFilter();hpf.type="highpass";hpf.frequency.value=hp;
+  const lpf=ctx.createBiquadFilter();lpf.type="lowpass";lpf.frequency.value=lp;lpf.Q.value=0.6;
   const g=env(t0,a,dec,v);
-  s.connect(hp2);hp2.connect(lp2);lp2.connect(bp);bp.connect(g);
+  s.connect(hpf);hpf.connect(lpf);lpf.connect(g);
   g.connect(masterGain);
   s.start(t0);s.stop(t0+d+0.05);
 }
@@ -332,9 +336,10 @@ function playSeq(){
   $("#playBtn").classList.add("playing");$("#playIcon").setAttribute("d","M6 4h4v16H6zM14 4h4v16h-4z");
   // Only play stems if at least one stem buffer has arrived; else fall back to stripped loop.
   const hasStems = !!(stems.drums||stems.bass||stems.other||stems.vocals);
-  if(stems.mix && hasStems){ if(!stems.playing) playStems(); }
-  else if(imp.buf && !impPlaying){ impOffset=0; impPlay(); }
-  if(impToggle()) impToggle().textContent="■ STOP BEAT";
+  let audioPlaying=false;
+  if(stems.mix && hasStems){ if(!stems.playing) playStems(); audioPlaying=true; }
+  else if(imp.buf && !impPlaying){ impOffset=0; impPlay(); audioPlaying=true; }
+  if(impToggle()) impToggle().textContent=audioPlaying?"■ STOP BEAT":"▶ PLAY BEAT";
 }
 function stopSeq(){
   seqState.playing=false;clearInterval(lhTimer);
@@ -373,8 +378,11 @@ document.addEventListener("keydown",e=>{
   if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT"||e.target.isContentEditable)return;
   const inBeat=$("#view-beat").classList.contains("active");
   const inRec=$("#view-rec").classList.contains("active");
+  const inSound=$("#view-sound").classList.contains("active");
   if(e.code==="Space"){
     e.preventDefault();
+    // If rhythm game is listening, it handles Space itself (e.stopPropagation still reaches us since same target).
+    if(inSound && rListen) return;
     if(inBeat){if(seqState.playing)stopSeq();else playSeq()}
     return;
   }
@@ -418,12 +426,13 @@ function impStop(pause){
   impPlaying=false;
   const b=impToggle();if(b)b.textContent="▶ PLAY BEAT";
 }
-const dropzone=$("#dropzone"),fileInput=$("#fileInput");
+const dropzone=$("#dropzone"),fileInput=$("#fileInput"),qToggle=$(".quality-toggle");
 ["dragenter","dragover"].forEach(ev=>dropzone.addEventListener(ev,e=>{e.preventDefault();dropzone.classList.add("drag")}));
 ["dragleave","drop"].forEach(ev=>dropzone.addEventListener(ev,e=>{e.preventDefault();dropzone.classList.remove("drag")}));
 dropzone.addEventListener("drop",e=>{const f=e.dataTransfer.files[0];if(f)loadImpFile(f)});
-dropzone.addEventListener("click",e=>{if(e.target.closest(".quality-toggle")||e.target.closest(".q-btn"))return;fileInput.click()});
+dropzone.addEventListener("click",e=>{if(e.target.closest(".quality-toggle")||e.target.closest(".q-btn")||e.target.closest(".imp-loaded"))return;fileInput.click()});
 fileInput.addEventListener("change",e=>{const f=e.target.files[0];if(f)loadImpFile(f);fileInput.value=""});
+if(qToggle){["dragenter","dragover","drop"].forEach(ev=>qToggle.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation()}))}
 /* quality toggle */
 let sepQuality="fast";
 $$(".q-btn").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();$$(".q-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");sepQuality=b.dataset.q;if(worker)worker.postMessage({type:"init",quality:sepQuality})}));
@@ -497,6 +506,13 @@ function initWorker(){
       for(let i=0;i<m.data.length/2;i++){L[i]=m.data[i*2];R[i]=m.data[i*2+1]}
       stems[m.stem]=buf;
       createStemSource(m.stem,buf);
+      // if transport is playing, hot-swap the stripped loop for the new stem bus
+      if(seqState.playing && impPlaying && !stems.playing){
+        impStop(true); // pause stripped at current offset
+        stems.offset=impOffset; // align
+        playStems();
+        if(impToggle()) impToggle().textContent="■ STOP BEAT";
+      }
     }
     else if(m.type==="slices"){
       renderSlices(m.stem,m.slices,m.sr);
@@ -706,6 +722,7 @@ $("#bpmShow").textContent=seqState.bpm+" BPM";
    MODE 2 — SOUND IT (ear training)
    ============================================================ */
 let soundInit=false;
+let rPat=[],rUser=[],rListen=false,rKeyHandler=null,rTapHandler=null,rStart=0,rNeeded=0;
 function initSound(){
   if(soundInit)return;soundInit=true;
   ensureCtx();
@@ -732,7 +749,6 @@ function initSound(){
   $("#ivPlay").addEventListener("click",()=>{if(!ivCur)pickIv();playIv()});
 
   /* rhythm */
-  let rPat=[],rUser=[],rListen=false,rKeyHandler=null,rTapHandler=null,rStart=0,rNeeded=0;
   function genPattern(){
     rPat=Array.from({length:8},()=>Math.random()<0.4);
     // ensure at least 2 hits so the game is never empty
@@ -810,7 +826,7 @@ function initSound(){
   }
   let specRAF;
   function drawSpec(){
-    if(!$("#view-sound").classList.contains("active")){specRAF=requestAnimationFrame(drawSpec);return}
+    if(!$("#view-sound").classList.contains("active")){specRAF=null;return}
     if(!sizeSpec()){specRAF=requestAnimationFrame(drawSpec);return}
     const w=specCanvas.clientWidth,h=specCanvas.clientHeight;
     specCtx.clearRect(0,0,w,h);const bars=48;const bw=w/bars;
@@ -948,5 +964,6 @@ function initRec(){
 }
 
 /* unlock audio */
-document.addEventListener("click",()=>{ensureCtx();if(ctx.state==="suspended")ctx.resume()},{once:true});
-document.addEventListener("keydown",()=>{ensureCtx();if(ctx.state==="suspended")ctx.resume()},{once:true});
+function unlockAudio(){ensureCtx();if(ctx.state==="suspended")ctx.resume()}
+document.addEventListener("pointerdown",unlockAudio,{once:true});
+document.addEventListener("keydown",unlockAudio,{once:true});
